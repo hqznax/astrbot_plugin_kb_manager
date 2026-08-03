@@ -19,5 +19,5 @@ help: |
   - 保存修改会删除旧文档并以新内容重新入库（重建向量）
 version: v1.2.0
 author: 沐瑶
-repo: ""
+repo: https://github.com/hqznax/astrbot_plugin_kb_manager
 astrbot_version: ">=4.16,<5"
