@@ -1,1 +1,120 @@
-上面我读到的 index.html 内容直接写入。
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>知识库管理</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-title">知识库管理</div>
+          <div class="brand-sub" id="status-text">准备中…</div>
+        </div>
+        <div class="top-actions">
+          <button class="btn btn-ghost" id="btn-refresh" type="button">刷新</button>
+          <button class="btn btn-primary" id="btn-create" type="button">新建文档</button>
+        </div>
+      </header>
+
+      <main class="layout">
+        <aside class="panel side">
+          <div class="panel-head">
+            <span>知识库</span>
+          </div>
+          <div id="kb-list" class="list"></div>
+        </aside>
+
+        <section class="panel mid">
+          <div class="panel-head row">
+            <div>
+              <div class="panel-title" id="doc-panel-title">文档列表</div>
+              <div class="muted" id="doc-panel-meta">先选一个知识库</div>
+            </div>
+            <div class="row gap">
+              <label class="check-all" title="全选当前页">
+                <input id="check-all" type="checkbox" />
+                <span>全选本页</span>
+              </label>
+              <input
+                id="search-input"
+                class="input"
+                type="search"
+                placeholder="搜索文件名"
+              />
+              <button class="btn btn-ghost" id="btn-search" type="button">搜索</button>
+              <button class="btn btn-ghost" id="btn-batch-download" type="button" disabled>
+                批量下载
+              </button>
+              <button class="btn btn-danger" id="btn-batch-delete" type="button" disabled>
+                批量删除
+              </button>
+            </div>
+          </div>
+          <div id="doc-list" class="list docs"></div>
+          <div class="pager">
+            <button class="btn btn-ghost btn-sm" id="btn-prev" type="button">上一页</button>
+            <span class="muted" id="page-info">-</span>
+            <button class="btn btn-ghost btn-sm" id="btn-next" type="button">下一页</button>
+          </div>
+        </section>
+
+        <section class="panel editor-panel">
+          <div class="panel-head row">
+            <div>
+              <div class="panel-title" id="editor-title">文档编辑</div>
+              <div class="muted" id="editor-meta">选择左侧文档进行查看 / 修改 / 删除</div>
+            </div>
+            <div class="row gap">
+              <button class="btn btn-ghost" id="btn-download" type="button" disabled>
+                下载
+              </button>
+              <button class="btn btn-danger" id="btn-delete" type="button" disabled>
+                删除
+              </button>
+              <button class="btn btn-primary" id="btn-save" type="button" disabled>
+                保存修改
+              </button>
+            </div>
+          </div>
+
+          <div class="editor-body">
+            <label class="field">
+              <span>文档名称</span>
+              <input id="doc-name" class="input" type="text" placeholder="例如：回答与记忆规范.txt" disabled />
+            </label>
+            <label class="field grow">
+              <span>正文内容</span>
+              <textarea
+                id="doc-content"
+                class="textarea"
+                placeholder="这里显示文档正文。保存后会删除旧文档并以新内容重新入库（重建向量索引）。"
+                disabled
+              ></textarea>
+            </label>
+            <div class="hint" id="editor-hint">
+              提示：原生知识库没有“原地改文件”，保存 = 重建文档。请确认后再保存。
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <div id="modal" class="modal hidden">
+      <div class="modal-card">
+        <div class="modal-title" id="modal-title">确认</div>
+        <div class="modal-body" id="modal-body"></div>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" id="modal-cancel" type="button">取消</button>
+          <button class="btn btn-danger" id="modal-ok" type="button">确认</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
