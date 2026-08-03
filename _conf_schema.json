@@ -1,1 +1,20 @@
-上面的 _conf_schema.json 内容直接写入。
+{
+  "only_admin": {
+    "description": "是否仅管理员可用（建议开启，删除操作较危险）",
+    "type": "bool",
+    "hint": "开启后，只有管理员能使用本插件全部命令",
+    "default": true
+  },
+  "page_size": {
+    "description": "每页显示文档数量",
+    "type": "int",
+    "hint": "查看知识库文件列表时的分页大小",
+    "default": 10
+  },
+  "delete_confirm_seconds": {
+    "description": "删除确认有效秒数",
+    "type": "int",
+    "hint": "执行删除后需在有效时间内发送「知识库确认删除」",
+    "default": 60
+  }
+}
