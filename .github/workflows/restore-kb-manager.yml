@@ -1,0 +1,27 @@
+name: Restore KB manager source
+
+on:
+  push:
+    paths:
+      - .github/workflows/restore-kb-manager.yml
+
+permissions:
+  contents: write
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Restore source from repository history
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git show 089f655af994f15a9396f32f328b3e9940b2d086 > main.py
+          git show 9d55741b7899819c05afc07b2a6a72bf4b6bd3d7 > page_api.py
+          git rm .github/workflows/restore-kb-manager.yml
+          git add main.py page_api.py
+          git commit -m "fix: restore knowledge base manager source files"
+          git push
