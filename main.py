@@ -13,6 +13,8 @@ from typing import Any
 from astrbot.api import logger
 from astrbot.api.event import filter
 from astrbot.api.star import Context, Star, register
+from astrbot.api.provider import ProviderRequest
+from astrbot.core.agent.message import TextPart
 from astrbot.core import AstrBotConfig
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
@@ -43,7 +45,7 @@ def _short_id(s: str | None, n: int = 8) -> str:
     "astrbot_plugin_kb_manager",
     "沐瑶",
     "知识库管理：聊天命令 + WebUI 查看/修改/删除",
-    "1.3.0",
+    "1.4.0",
     "",
 )
 class KBManagerPlugin(Star):
@@ -55,6 +57,8 @@ class KBManagerPlugin(Star):
         self._pending_delete: dict[str, dict[str, Any]] = {}
         self.page_api = None
         self._register_official_page_api_if_available()
+
+        logger.info("[kb_manager] 自动知识库召回已%s", "开启" if self._auto_enabled() else "关闭")
 
     def _register_official_page_api_if_available(self) -> None:
         """注册官方插件 Pages API（需 AstrBot 支持 register_web_api）。"""
@@ -75,6 +79,143 @@ class KBManagerPlugin(Star):
                 f"[kb_manager] 官方插件页面 API 注册失败: {exc}",
                 exc_info=True,
             )
+
+    # ---------- 自动召回 ----------
+
+    def _auto_conf(self, key: str, default: Any = None) -> Any:
+        block = self.config.get("auto_retrieval", {}) or {}
+        if isinstance(block, dict) and key in block:
+            return block.get(key)
+        return self.config.get(f"auto_retrieval.{key}", default)
+
+    def _auto_enabled(self) -> bool:
+        return bool(self._auto_conf("enabled", True))
+
+    def _auto_timeout(self) -> float:
+        try:
+            return max(1.0, min(float(self._auto_conf("timeout_seconds", 8)), 30.0))
+        except Exception:
+            return 8.0
+
+    def _auto_top_k(self) -> int:
+        try:
+            return max(1, min(int(self._auto_conf("top_k", 5)), 12))
+        except Exception:
+            return 5
+
+    def _normalize_title(self, value: str) -> str:
+        import re
+        from pathlib import Path
+        name = Path(str(value or "")).stem.lower()
+        return re.sub(r"[\s_\-—－·.，,。:：()（）\[\]【】]+", "", name)
+
+    async def _auto_scope(self, message: str) -> tuple[list[str], list[tuple[Any, Any]]]:
+        """返回可检索知识库，以及消息中直接命中的文档标题。"""
+        configured = self._auto_conf("kb_names", []) or []
+        helpers = await self._list_kb_helpers()
+        if configured:
+            names = [str(x).strip() for x in configured if str(x).strip()]
+            helpers = [h for h in helpers if h.kb.kb_name in names or h.kb.kb_id in names]
+        text = self._normalize_title(message)
+        direct: list[tuple[Any, Any]] = []
+        usable = []
+        for helper in helpers:
+            if getattr(helper, "init_error", None):
+                continue
+            usable.append(helper.kb.kb_name)
+            docs = await helper.list_documents(offset=0, limit=500)
+            for doc in docs:
+                title = self._normalize_title(doc.doc_name or "")
+                import re
+                title_core = re.sub(r"(?:20\d{2})?\d{4,}(?:至|-)?\d*$", "", title).strip()
+                if (len(title) >= 2 and title in text) or (len(title_core) >= 4 and title_core in text):
+                    direct.append((helper, doc))
+        return usable, direct
+
+    async def _read_direct_documents(self, direct: list[tuple[Any, Any]], max_chars: int) -> str:
+        blocks = []
+        used = 0
+        for helper, doc in direct[:3]:
+            chunks = await helper.get_chunks_by_doc_id(doc.doc_id, offset=0, limit=200)
+            chunks.sort(key=lambda x: int(x.get("chunk_index") or 0))
+            content = "".join(str(x.get("content") or "") for x in chunks).strip()
+            if not content:
+                continue
+            remain = max_chars - used
+            if remain <= 0:
+                break
+            content = content[:remain]
+            blocks.append(f"【文档：{doc.doc_name}｜知识库：{helper.kb.kb_name}】\n{content}")
+            used += len(content)
+        return "\n\n".join(blocks)
+
+    async def _auto_retrieve(self, event: AstrMessageEvent, req: ProviderRequest) -> None:
+        message = str(getattr(event, "message_str", "") or "").strip()
+        if not self._auto_enabled() or len(message) < 2:
+            return
+        marker = "[KB_MANAGER_AUTO_CONTEXT]"
+        existing = "\n".join(str(getattr(x, "text", "")) for x in (getattr(req, "extra_user_content_parts", []) or []))
+        if marker in existing or marker in str(getattr(req, "prompt", "") or ""):
+            return
+        import asyncio
+        try:
+            kb_names, direct = await asyncio.wait_for(self._auto_scope(message), timeout=self._auto_timeout())
+            if not kb_names:
+                return
+            try:
+                max_chars = max(1000, min(int(self._auto_conf("max_context_chars", 6000)), 20000))
+            except Exception:
+                max_chars = 6000
+            if direct:
+                context_text = await asyncio.wait_for(self._read_direct_documents(direct, max_chars), timeout=self._auto_timeout())
+                source_note = "、".join(f"{h.kb.kb_name}/{d.doc_name}" for h, d in direct[:3])
+            else:
+                # 标题未直中时，对有实际内容的聊天做语义检索，从而覆盖“关键词/近义表达”触发。
+                if len(message) < max(2, int(self._auto_conf("min_query_chars", 4))):
+                    return
+                mgr = self._kb_mgr()
+                result = await asyncio.wait_for(
+                    mgr.retrieve(message, kb_names, top_k_fusion=max(self._auto_top_k() * 4, 10), top_m_final=self._auto_top_k()),
+                    timeout=self._auto_timeout(),
+                )
+                rows = (result or {}).get("results", [])
+                try:
+                    threshold = float(self._auto_conf("min_score", 0.2))
+                except Exception:
+                    threshold = 0.2
+                rows = [x for x in rows if float(x.get("score") or 0) >= threshold]
+                if not rows:
+                    return
+                parts = []
+                used = 0
+                for i, row in enumerate(rows, 1):
+                    content = str(row.get("content") or "").strip()
+                    remain = max_chars - used
+                    if not content or remain <= 0:
+                        break
+                    content = content[:remain]
+                    parts.append(f"【知识 {i}｜{row.get('kb_name')}/{row.get('doc_name')}】\n{content}")
+                    used += len(content)
+                context_text = "\n\n".join(parts)
+                source_note = "语义检索：" + "、".join(sorted({str(x.get("doc_name") or "") for x in rows}))
+            if not context_text:
+                return
+            injection = (
+                f"{marker}\n这是本轮自动检索到的知识库资料。请把它与当前对话、已注入记忆一起整合后自然回答；"
+                f"资料仅供参考，冲突时以用户当前消息和更新更明确的信息为准，不要复述本说明。\n来源：{source_note}\n"
+                f"{context_text}\n[/KB_MANAGER_AUTO_CONTEXT]"
+            )
+            req.extra_user_content_parts = getattr(req, "extra_user_content_parts", None) or []
+            req.extra_user_content_parts.append(TextPart(text=injection).mark_as_temp())
+            logger.info("[kb_manager] 自动召回命中：source=%s chars=%s", source_note, len(injection))
+        except asyncio.TimeoutError:
+            logger.warning("[kb_manager] 自动知识库召回超时，跳过本轮")
+        except Exception as exc:
+            logger.warning("[kb_manager] 自动知识库召回失败，跳过本轮：%s", exc, exc_info=True)
+
+    @filter.on_llm_request(priority=-15)
+    async def on_llm_request(self, event: AstrMessageEvent, req: ProviderRequest):
+        await self._auto_retrieve(event, req)
 
     # ---------- 配置与权限 ----------
 
