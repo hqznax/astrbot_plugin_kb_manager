@@ -17,7 +17,7 @@ help: |
   - AstrBot WebUI → 插件 → 知识库管理 → Pages → dashboard
   - 支持查看 / 搜索 / 编辑正文 / 删除 / 新建纯文本文档
   - 保存修改会删除旧文档并以新内容重新入库（重建向量）
-version: v1.3.0
+version: v1.4.0
 author: 沐瑶
 repo: https://github.com/hqznax/astrbot_plugin_kb_manager
 astrbot_version: ">=4.16,<5"
