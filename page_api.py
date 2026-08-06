@@ -168,7 +168,7 @@ class PluginPageApi:
             register(route, handler, methods, desc)
 
     async def ping(self):
-        return _ok({"message": "pong", "plugin": PLUGIN_NAME, "version": "1.2.0"})
+        return _ok({"message": "pong", "plugin": PLUGIN_NAME, "version": "1.4.0"})
 
     def _kb_mgr(self):
         mgr = getattr(self.plugin.context, "kb_manager", None)
