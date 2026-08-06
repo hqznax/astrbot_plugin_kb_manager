@@ -16,5 +16,46 @@
     "type": "int",
     "hint": "执行删除后需在有效时间内发送「知识库确认删除」",
     "default": 60
+  },
+  "auto_retrieval": {
+    "description": "自动知识库召回：聊天命中文档标题或语义关键词时，读取资料并临时注入本轮回答",
+    "type": "object",
+    "items": {
+      "enabled": {
+        "description": "开启自动知识库召回",
+        "type": "bool",
+        "default": true
+      },
+      "kb_names": {
+        "description": "限定检索的知识库名称/ID；留空表示全部知识库",
+        "type": "list",
+        "default": []
+      },
+      "top_k": {
+        "description": "语义检索最多注入的知识块数量",
+        "type": "int",
+        "default": 5
+      },
+      "min_score": {
+        "description": "语义检索最低相关度，越高越严格",
+        "type": "float",
+        "default": 0.2
+      },
+      "min_query_chars": {
+        "description": "标题未命中时，启动语义检索的最短消息长度",
+        "type": "int",
+        "default": 4
+      },
+      "max_context_chars": {
+        "description": "单轮最多注入的知识库正文字符数",
+        "type": "int",
+        "default": 6000
+      },
+      "timeout_seconds": {
+        "description": "标题扫描或语义检索超时秒数；超时则跳过，不阻塞聊天",
+        "type": "float",
+        "default": 8
+      }
+    }
   }
 }
